@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamevoo Runner</title>
+    <style>
+        /* CSS Section */
+        body {
+            margin: 0;
+            background: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            border: 5px solid #00ffcc;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+            background: #333;
+        }
+
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 2px 2px #000;
+            z-index: 10;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(#222, #444);
+        }
+
+        #overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+
+        #overlay h1 {
+            color: #ff4444;
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 20px;
+            cursor: pointer;
+            background: #00ffcc;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #00cca3;
+            transform: scale(1.1);
+        }
+
+        .controls-hint {
+            margin-top: 10px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui">Coins: <span id="coinCount">0</span></div>
+        
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="overlay">
+            <h1>CRASHED!</h1>
+            <p id="finalScore" style="font-size: 20px; margin-bottom: 20px;"></p>
+            <button onclick="resetGame()">RUN AGAIN</button>
+        </div>
+    </div>
+
+    <p class="controls-hint">Use ⬅️ and ➡️ Arrows to Switch Lanes</p>
+
+    <script>
+        // JAVASCRIPT Section
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const coinCountDisplay = document.getElementById('coinCount');
+        const overlay = document.getElementById('overlay');
+        const finalScoreText = document.getElementById('finalScore');
+
+        canvas.width = 360;
+        canvas.height = 600;
+
+        let score = 0;
+        let gameActive = true;
+        let speed = 6;
+        let laneWidth = canvas.width / 3;
+        
+        // Player object
+        let player = {
+            lane: 1, // Start in middle lane (0, 1, 2)
+            width: 40,
+            height: 70,
+            y: 500
+        };
+
+        let obstacles = [];
+        let coins = [];
+
+        // Handle Movement
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' && player.lane > 0) player.lane--;
+            if (e.key === 'ArrowRight' && player.lane < 2) player.lane++;
+        });
+
+        function spawnObjects() {
+            // Chance to spawn obstacle
+            if (Math.random() < 0.03) {
+                obstacles.push({
+                    lane: Math.floor(Math.random() * 3),
+                    y: -100,
+                    w: laneWidth - 30,
+                    h: 50
+                });
+            }
+            // Chance to spawn coin
+            if (Math.random() < 0.04) {
+                coins.push({
+                    lane: Math.floor(Math.random() * 3),
+                    y: -50,
+                    r: 12
+                });
+            }
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            speed += 0.0005; // Make game harder over time
+
+            // Process Obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].y += speed;
+
+                // Collision Logic
+                let obsX = obstacles[i].lane * laneWidth + 15;
+                let playerX = player.lane * laneWidth + (laneWidth/2 - 20);
+
+                if (obstacles[i].lane === player.lane &&
+                    obstacles[i].y + obstacles[i].h > player.y &&
+                    obstacles[i].y < player.y + player.height) {
+                    endGame();
+                }
+
+                if (obstacles[i].y > canvas.height) obstacles.splice(i, 1);
+            }
+
+            // Process Coins
+            for (let i = coins.length - 1; i >= 0; i--) {
+                coins[i].y += speed;
+
+                if (coins[i].lane === player.lane &&
+                    coins[i].y + coins[i].r > player.y &&
+                    coins[i].y - coins[i].r < player.y + player.height) {
+                    score += 1;
+                    coinCountDisplay.innerText = score;
+                    coins.splice(i, 1);
+                }
+
+                if (coins[i].y > canvas.height) coins.splice(i, 1);
+            }
+
+            spawnObjects();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Road Lanes
+            ctx.strokeStyle = "#555";
+            ctx.setLineDash([20, 20]);
+            for(let i=1; i<3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * laneWidth, 0);
+                ctx.lineTo(i * laneWidth, canvas.height);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]); // Reset dash
+
+            // Draw Coins
+            ctx.fillStyle = "#ffd700";
+            coins.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.lane * laneWidth + laneWidth/2, c.y, c.r, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.stroke();
+            });
+
+            // Draw Obstacles (Trains/Barriers)
+            ctx.fillStyle = "#ff4444";
+            obstacles.forEach(o => {
+                ctx.fillRect(o.lane * laneWidth + 15, o.y, o.w, o.h);
+                // Add a little detail to barriers
+                ctx.fillStyle = "rgba(0,0,0,0.2)";
+                ctx.fillRect(o.lane * laneWidth + 15, o.y + 10, o.w, 5);
+                ctx.fillStyle = "#ff4444";
+            });
+
+            // Draw Player (Gamevoo character)
+            let pX = player.lane * laneWidth + (laneWidth/2 - 20);
+            ctx.fillStyle = "#00ffcc";
+            ctx.fillRect(pX, player.y, player.width, player.height);
+            // Character eyes
+            ctx.fillStyle = "white";
+            ctx.fillRect(pX + 5, player.y + 10, 10, 10);
+            ctx.fillRect(pX + 25, player.y + 10, 10, 10);
+
+            if (gameActive) {
+                update();
+                requestAnimationFrame(draw);
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            overlay.style.display = 'flex';
+            finalScoreText.innerText = `You collected ${score} Gamevoo coins!`;
+        }
+
+        function resetGame() {
+            score = 0;
+            speed = 6;
+            obstacles = [];
+            coins = [];
+            player.lane = 1;
+            gameActive = true;
+            coinCountDisplay.innerText = "0";
+            overlay.style.display = 'none';
+            draw();
+        }
+
+        // Start the game loop
+        draw();
+    </script>
+</body>
+</html>
+
